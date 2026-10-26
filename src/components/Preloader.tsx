@@ -66,14 +66,14 @@ export function Preloader({ onLoaded, minDurationMs = 1400 }: PreloaderProps) {
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black overflow-hidden select-none"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-white overflow-hidden select-none p-6"
       style={{ willChange: "opacity" }}
     >
       <img
         ref={imgRef}
         src="/72b45c3119f987c6ca1238228d2db393.gif"
         alt="Loading..."
-        className="w-full h-full object-cover object-center"
+        className="max-w-[85vw] max-h-[70vh] w-auto h-auto sm:max-w-[380px] md:max-w-[440px] object-contain object-center"
       />
     </div>
   );
