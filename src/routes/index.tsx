@@ -11,7 +11,7 @@ import {
   DialogTrigger,
 } from "../components/ui/dialog";
 import { Preloader } from "../components/Preloader";
-import { GsapAirplaneBackground } from "../components/GsapAirplaneBackground";
+
 
 export const Route = createFileRoute("/")(({
   head: () => ({
@@ -484,8 +484,7 @@ function Index() {
       {/* Waiting screen with user GIF and GSAP progress transitions */}
       <Preloader />
 
-      {/* GSAP Airplane Background Animation with contrails and aerodynamic physics */}
-      <GsapAirplaneBackground />
+
 
       {/* Fixed video background for the entire page */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
