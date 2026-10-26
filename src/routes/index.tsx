@@ -391,98 +391,101 @@ function Index() {
   const heroTextOpacity = Math.max(0, 1 - scrollY / 400); 
   const heroTranslateY = 0; 
 
+  const [pageReady, setPageReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const videoTimeRef = useRef(0);
-  const scrollVelocityRef = useRef(0);
   const durationRef = useRef(0);
-  const lastScrollYRef = useRef(0);
+  const targetTimeRef = useRef(0);
+  const currentTimeRef = useRef(0);
   const rafRef = useRef<number | null>(null);
-  const lastTsRef = useRef<number>(0);
 
-  // Scroll-driven video playback — reacts to scroll velocity with inertia.
-  // Forward motion uses native video playback; reverse uses tiny exact seeks.
+  // High-performance scroll-driven video synchronization
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-    const maxScroll = () => Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-    const movementScale = () => ((durationRef.current || 1) / maxScroll()) * 4.5;
+    video.pause();
 
-    const setVideoTime = (time: number) => {
-      try { video.currentTime = time; } catch { /* ignore seek races */ }
-    };
-
-    const captureScrollImpulse = () => {
-      const scrollY = window.scrollY || 0;
-      const delta = scrollY - lastScrollYRef.current;
-      lastScrollYRef.current = scrollY;
-      if (!durationRef.current || Math.abs(delta) < 0.5) return;
-
-      const impulse = delta * movementScale();
-      scrollVelocityRef.current = clamp(scrollVelocityRef.current + impulse, -1.6, 1.6);
-    };
-
-    const tick = (ts: number) => {
-      const dt = lastTsRef.current ? (ts - lastTsRef.current) / 1000 : 0.016;
-      lastTsRef.current = ts;
-
-      const duration = durationRef.current;
-      const maxTime = Math.max(0, duration - 0.08);
-      const velocity = scrollVelocityRef.current;
-
-      if (duration > 0 && Math.abs(velocity) >= 0.012) {
-        if (velocity > 0 && Math.abs(video.currentTime - videoTimeRef.current) < 0.28) {
-          video.playbackRate = clamp(velocity, 0.35, 1.35);
-          if (video.paused) video.play().catch(() => {});
-          videoTimeRef.current = clamp(video.currentTime || videoTimeRef.current, 0, maxTime);
-        } else {
-          if (!video.paused) video.pause();
-          const next = clamp(videoTimeRef.current + velocity * dt, 0, maxTime);
-          videoTimeRef.current = next;
-          if (Math.abs(video.currentTime - next) > 0.006) setVideoTime(next);
-        }
-
-        scrollVelocityRef.current *= Math.exp(-dt * 4.5);
-      } else {
-        scrollVelocityRef.current = 0;
-        if (!video.paused) video.pause();
-        videoTimeRef.current = clamp(video.currentTime || videoTimeRef.current, 0, maxTime);
+    const calcScrollTarget = () => {
+      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const progress = Math.min(1, Math.max(0, window.scrollY / maxScroll));
+      const duration = durationRef.current || video.duration || 0;
+      if (duration > 0) {
+        targetTimeRef.current = progress * duration;
       }
+    };
 
+    const markReady = () => {
+      if (video.duration && Number.isFinite(video.duration)) {
+        durationRef.current = video.duration;
+        calcScrollTarget();
+        currentTimeRef.current = targetTimeRef.current;
+        try {
+          video.currentTime = targetTimeRef.current;
+        } catch {
+          /* ignore seek races */
+        }
+      }
+      setPageReady(true);
+    };
+
+    if (video.readyState >= 2) {
+      markReady();
+    } else {
+      video.addEventListener("loadedmetadata", markReady);
+      video.addEventListener("loadeddata", markReady);
+      video.addEventListener("canplay", markReady);
+    }
+
+    // Direct scroll sync on scroll and resize
+    const onScroll = () => {
+      calcScrollTarget();
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", calcScrollTarget);
+
+    // Fast, buttery lerp loop: catches up immediately within 2-3 frames on scroll
+    const tick = () => {
+      if (durationRef.current > 0) {
+        const target = targetTimeRef.current;
+        const current = currentTimeRef.current;
+        const diff = target - current;
+
+        if (Math.abs(diff) > 0.005) {
+          currentTimeRef.current += diff * 0.35;
+          try {
+            video.currentTime = currentTimeRef.current;
+          } catch {
+            /* ignore seek races */
+          }
+        }
+      }
       rafRef.current = requestAnimationFrame(tick);
     };
 
-    const onMeta = () => {
-      durationRef.current = Number.isFinite(video.duration) ? video.duration : 0;
-      video.pause();
-      videoTimeRef.current = video.currentTime || 0;
-      lastScrollYRef.current = window.scrollY || 0;
-      if (rafRef.current == null) {
-        lastTsRef.current = 0;
-        rafRef.current = requestAnimationFrame(tick);
-      }
-    };
-    if (video.readyState >= 1) onMeta();
-    else video.addEventListener("loadedmetadata", onMeta);
+    rafRef.current = requestAnimationFrame(tick);
+    calcScrollTarget();
 
-    window.addEventListener("scroll", captureScrollImpulse, { passive: true });
-    window.addEventListener("resize", captureScrollImpulse);
+    // Safety fallback: dismiss preloader after 4.5s even if network is very slow
+    const fallbackTimer = setTimeout(() => {
+      setPageReady(true);
+    }, 4500);
 
     return () => {
-      window.removeEventListener("scroll", captureScrollImpulse);
-      window.removeEventListener("resize", captureScrollImpulse);
-      video.removeEventListener("loadedmetadata", onMeta);
+      clearTimeout(fallbackTimer);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", calcScrollTarget);
+      video.removeEventListener("loadedmetadata", markReady);
+      video.removeEventListener("loadeddata", markReady);
+      video.removeEventListener("canplay", markReady);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
     };
   }, []);
 
-
   return (
     <div className="relative min-h-screen">
-      {/* Waiting screen with user GIF and GSAP progress transitions */}
-      <Preloader />
+      {/* Waiting screen with user GIF, stays visible until page & video are ready */}
+      <Preloader isReady={pageReady} />
 
 
 

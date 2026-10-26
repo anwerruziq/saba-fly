@@ -1,23 +1,33 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 
 interface PreloaderProps {
   onLoaded?: () => void;
   minDurationMs?: number;
+  isReady?: boolean;
 }
 
-export function Preloader({ onLoaded, minDurationMs = 1400 }: PreloaderProps) {
+export function Preloader({ onLoaded, minDurationMs = 1500, isReady = true }: PreloaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const isFinishedRef = useRef(false);
+  const [minTimePassed, setMinTimePassed] = useState(false);
+
+  useEffect(() => {
+    // Keep visible for at least minDurationMs so user sees the clean loading animation
+    const timer = setTimeout(() => {
+      setMinTimePassed(true);
+    }, minDurationMs);
+
+    return () => clearTimeout(timer);
+  }, [minDurationMs]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (isFinishedRef.current) return;
 
-    let isWindowLoaded = document.readyState === "complete";
-
-    const finishLoading = () => {
-      if (isFinishedRef.current) return;
+    // Only finish when BOTH minimum time has elapsed AND page/video assets are ready!
+    if (minTimePassed && isReady) {
       isFinishedRef.current = true;
 
       if (containerRef.current) {
@@ -32,36 +42,32 @@ export function Preloader({ onLoaded, minDurationMs = 1400 }: PreloaderProps) {
 
         tl.to(imgRef.current, {
           scale: 1.05,
-          duration: 0.7,
+          duration: 0.6,
           ease: "power2.out",
         }).to(
           containerRef.current,
           {
             opacity: 0,
-            duration: 0.7,
+            duration: 0.6,
             ease: "power2.inOut",
           },
-          "-=0.5",
+          "-=0.3",
         );
       } else {
         onLoaded?.();
       }
-    };
+    }
+  }, [minTimePassed, isReady, onLoaded]);
 
-    const timer = setTimeout(() => {
-      if (isWindowLoaded) {
-        finishLoading();
-      } else {
-        window.addEventListener("load", finishLoading, { once: true });
-        // Fallback max timeout
-        setTimeout(finishLoading, 2500);
+  // Safety fallback: if anything blocks network for too long (e.g. 7s), let user enter
+  useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      if (!isFinishedRef.current) {
+        setMinTimePassed(true);
       }
-    }, minDurationMs);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [minDurationMs, onLoaded]);
+    }, 7000);
+    return () => clearTimeout(fallbackTimer);
+  }, []);
 
   return (
     <div
