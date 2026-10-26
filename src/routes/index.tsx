@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { Menu, X, Plane, Clock, Shield, Star, ChevronDown, RefreshCw } from "lucide-react";
+import gsap from "gsap";
 import logo from "../assets/logo.png";
 import {
   Dialog,
@@ -29,32 +30,115 @@ const NAV_HREFS  = ["start",   "story",  "destinations",   "benefits", "faq", "b
 const VIDEO_URL =
   "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_091828_e240eb17-6edc-4129-ad9d-98678e3fd238.mp4";
 
-const RevealOnScroll = ({ children, className = "", delay = 0 }: { children: React.ReactNode, className?: string, delay?: number }) => {
-  const [isVisible, setIsVisible] = useState(false);
+// Smooth GSAP scroll-down reveal for individual blocks
+const RevealOnScroll = ({
+  children,
+  className = "",
+  delay = 0,
+  direction = "up",
+  distance = 45,
+  duration = 0.9,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+  direction?: "up" | "down" | "left" | "right" | "zoom";
+  distance?: number;
+  duration?: number;
+}) => {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    let initialX = 0;
+    let initialY = 0;
+    let initialScale = 1;
+
+    if (direction === "up") initialY = distance;
+    else if (direction === "down") initialY = -distance;
+    else if (direction === "left") initialX = -distance;
+    else if (direction === "right") initialX = distance;
+    else if (direction === "zoom") initialScale = 0.9;
+
+    gsap.set(el, { opacity: 0, x: initialX, y: initialY, scale: initialScale });
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setIsVisible(true);
-          if (ref.current) observer.unobserve(ref.current);
+          gsap.to(el, {
+            opacity: 1,
+            x: 0,
+            y: 0,
+            scale: 1,
+            duration,
+            delay: delay / 1000,
+            ease: "power3.out",
+            clearProps: "transform",
+          });
+          observer.unobserve(el);
         }
       },
-      { threshold: 0.1, rootMargin: "0px 0px -50px 0px" }
+      { threshold: 0.1, rootMargin: "0px 0px -40px 0px" }
     );
-    if (ref.current) observer.observe(ref.current);
+
+    observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [delay, direction, distance, duration]);
 
   return (
-    <div
-      ref={ref}
-      style={{ transitionDelay: `${delay}ms` }}
-      className={`transition-all duration-1000 ease-out transform ${
-        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-16"
-      } ${className}`}
-    >
+    <div ref={ref} className={className}>
+      {children}
+    </div>
+  );
+};
+
+// Smooth GSAP stagger reveal for groups of cards (e.g. destinations, benefits, FAQs)
+const StaggerReveal = ({
+  children,
+  className = "",
+  stagger = 0.12,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  stagger?: number;
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const childElements = container.children;
+    if (!childElements || childElements.length === 0) return;
+
+    gsap.set(childElements, { opacity: 0, y: 50, scale: 0.94 });
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          gsap.to(childElements, {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.85,
+            stagger,
+            ease: "power3.out",
+            clearProps: "transform",
+          });
+          observer.unobserve(container);
+        }
+      },
+      { threshold: 0.08, rootMargin: "0px 0px -40px 0px" }
+    );
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [stagger]);
+
+  return (
+    <div ref={containerRef} className={className}>
       {children}
     </div>
   );
@@ -698,7 +782,7 @@ function Index() {
                 </h2>
               </div>
               
-              <div className="mt-12 grid gap-x-8 gap-y-20 sm:grid-cols-2 lg:grid-cols-4 pb-16">
+              <StaggerReveal className="mt-12 grid gap-x-8 gap-y-20 sm:grid-cols-2 lg:grid-cols-4 pb-16">
                 {[
                   { name: "إسطنبول، تركيا", img: "/dest-istanbul.jpg", cls: "lg:translate-y-0 lg:-rotate-2" },
                   { name: "مسقط، عُمان", img: "/dest-muscat.jpg", cls: "lg:translate-y-8 lg:rotate-2" },
@@ -712,7 +796,7 @@ function Index() {
                     <p className="absolute bottom-5 left-0 right-0 text-center text-lg font-bold" style={{ color: "#202A36" }}>{dest.name}</p>
                   </div>
                 ))}
-              </div>
+              </StaggerReveal>
 
               {/* Hajj and Umrah Banner */}
               <div className="mt-16 overflow-hidden rounded-2xl bg-[#202A36]/80 backdrop-blur-xl text-white">
@@ -751,20 +835,20 @@ function Index() {
             <h2 className="mt-3 text-4xl font-normal tracking-tight md:text-5xl" style={{ color: "#202A36" }}>
               لماذا تختار سبأ للطيران.
             </h2>
-            <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+            <StaggerReveal className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
               {[
                 { icon: Plane, title: "شبكة واسعة", desc: "نصلك بأهم الوجهات الإقليمية والدولية." },
                 { icon: Clock, title: "دقة المواعيد", desc: "نلتزم بجدول رحلات دقيق وموثوق." },
                 { icon: Shield, title: "معايير السلامة", desc: "أعلى معايير الأمان الدولية في جميع رحلاتنا." },
                 { icon: Star, title: "خدمة مميزة", desc: "طاقم ضيافة يمني محترف بخدمتك دائماً." },
               ].map(({ icon: Icon, title, desc }) => (
-                <div key={title} className="rounded-2xl bg-white/40 p-6 backdrop-blur-md border border-white/50">
+                <div key={title} className="rounded-2xl bg-white/40 p-6 backdrop-blur-md border border-white/50 transition-all duration-300 hover:bg-white/60 hover:-translate-y-2 hover:shadow-xl">
                   <Icon size={28} style={{ color: "#202A36" }} />
                   <h3 className="mt-4 text-lg font-semibold" style={{ color: "#202A36" }}>{title}</h3>
                   <p className="mt-2 text-gray-700">{desc}</p>
                 </div>
               ))}
-            </div>
+            </StaggerReveal>
           </div>
         </RevealOnScroll>
       </section>
@@ -777,7 +861,7 @@ function Index() {
             <h2 className="mt-3 text-4xl font-normal tracking-tight md:text-5xl" style={{ color: "#202A36" }}>
               الأسئلة الشائعة.
             </h2>
-            <div className="mt-12 divide-y divide-gray-200">
+            <StaggerReveal className="mt-12 divide-y divide-gray-200">
               {[
                 { q: "كيف يمكنني حجز تذكرة؟", a: "يمكنك الحجز عبر موقعنا الإلكتروني، تطبيق الهاتف، أو زيارة أقرب وكيل معتمد." },
                 { q: "هل هناك رسوم مخفية؟", a: "لا، جميع أسعارنا تشمل الضرائب والرسوم الأساسية لضمان الشفافية." },
@@ -792,7 +876,7 @@ function Index() {
                   <p className="mt-3 text-gray-700">{item.a}</p>
                 </details>
               ))}
-            </div>
+            </StaggerReveal>
           </div>
         </RevealOnScroll>
       </section>
@@ -805,25 +889,28 @@ function Index() {
             <h2 className="mt-3 text-4xl font-normal tracking-tight md:text-5xl" style={{ color: "#202A36" }}>
               نحن هنا لخدمتك.
             </h2>
-            <div className="mt-10 flex flex-col md:flex-row gap-8">
-              <form className="flex-1 space-y-4" onSubmit={(e) => e.preventDefault()}>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">الاسم الكامل</label>
-                  <input type="text" className="mt-1 w-full rounded-md border-gray-300 bg-white/50 p-3 outline-none focus:bg-white focus:ring-2 focus:ring-[#202A36]" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">رقم الهاتف</label>
-                  <input type="tel" className="mt-1 w-full rounded-md border-gray-300 bg-white/50 p-3 outline-none focus:bg-white focus:ring-2 focus:ring-[#202A36]" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">الرسالة أو الاستفسار</label>
-                  <textarea rows={4} className="mt-1 w-full rounded-md border-gray-300 bg-white/50 p-3 outline-none focus:bg-white focus:ring-2 focus:ring-[#202A36]"></textarea>
-                </div>
-                <button className="w-full rounded-md bg-[#202A36] px-4 py-3 font-medium text-white transition-colors hover:bg-[#1a2229]">
-                  إرسال الطلب
-                </button>
-              </form>
-              <div className="flex-1 space-y-6">
+            <div className="mt-10 flex flex-col md:flex-row gap-8 overflow-hidden">
+              <RevealOnScroll direction="right" className="flex-1">
+                <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">الاسم الكامل</label>
+                    <input type="text" className="mt-1 w-full rounded-md border-gray-300 bg-white/50 p-3 outline-none focus:bg-white focus:ring-2 focus:ring-[#202A36]" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">رقم الهاتف</label>
+                    <input type="tel" className="mt-1 w-full rounded-md border-gray-300 bg-white/50 p-3 outline-none focus:bg-white focus:ring-2 focus:ring-[#202A36]" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">الرسالة أو الاستفسار</label>
+                    <textarea rows={4} className="mt-1 w-full rounded-md border-gray-300 bg-white/50 p-3 outline-none focus:bg-white focus:ring-2 focus:ring-[#202A36]"></textarea>
+                  </div>
+                  <button className="w-full rounded-md bg-[#202A36] px-4 py-3 font-medium text-white transition-colors hover:bg-[#1a2229]">
+                    إرسال الطلب
+                  </button>
+                </form>
+              </RevealOnScroll>
+
+              <RevealOnScroll direction="left" delay={150} className="flex-1 space-y-6">
                 <div>
                   <h4 className="text-lg font-medium text-gray-900">أرقام التواصل</h4>
                   <p className="mt-2 text-gray-700" dir="ltr">+967 1 234 567</p>
@@ -837,7 +924,7 @@ function Index() {
                   <h4 className="text-lg font-medium text-gray-900">أوقات العمل</h4>
                   <p className="mt-2 text-gray-700">السبت - الخميس: 8 صباحاً - 8 مساءً</p>
                 </div>
-              </div>
+              </RevealOnScroll>
             </div>
           </div>
         </RevealOnScroll>
